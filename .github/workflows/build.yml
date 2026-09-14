@@ -1,0 +1,58 @@
+name: Build Native Operon for Termux Bionic
+
+on:
+  workflow_dispatch: # Allows you to trigger the build with 1 click!
+
+jobs:
+  build-android-bionic:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+          add-to-path: true
+
+      - name: Install Ninja & Build Essentials
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake
+
+      - name: Clone and Bootstrap vcpkg
+        run: |
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git $HOME/vcpkg
+          $HOME/vcpkg/bootstrap-vcpkg.sh
+
+      - name: Clone Operon with Submodules
+        run: |
+          git clone --recursive https://github.com/heal-research/operon.git $HOME/operon
+
+      - name: Configure CMake for Android ARM64 (Bionic)
+        run: |
+          cd $HOME/operon
+          cmake -B build -S . -GNinja \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DANDROID_STL=c++_static \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_CLI_PROGRAMS=ON \
+            -DENABLE_TESTING=OFF \
+            -DVCPKG_TARGET_TRIPLET=arm64-android \
+            -DVCPKG_OVERLAY_PORTS=./ports \
+            -DCMAKE_TOOLCHAIN_FILE_VCPKG=$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+      - name: Compile Native Operon CLI
+        run: |
+          cd $HOME/operon
+          ninja -C build operon_cli
+
+      - name: Upload Finished Android Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: operon_cli-termux-arm64
+          path: $HOME/operon/build/cli/operon_cli
