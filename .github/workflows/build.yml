@@ -1,7 +1,7 @@
 name: Build Native Operon for Termux Bionic
 
 on:
-  workflow_dispatch: # Allows you to trigger the build with 1 click!
+  workflow_dispatch:
 
 jobs:
   build-android-bionic:
@@ -20,9 +20,9 @@ jobs:
       - name: Install Ninja & Build Essentials
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake
+          sudo apt-get install -y ninja-build cmake zip unzip pkg-config
 
-      - name: Clone and Bootstrap vcpkg
+      - name: Setup vcpkg
         run: |
           git clone --depth 1 https://github.com/microsoft/vcpkg.git $HOME/vcpkg
           $HOME/vcpkg/bootstrap-vcpkg.sh
@@ -31,20 +31,31 @@ jobs:
         run: |
           git clone --recursive https://github.com/heal-research/operon.git $HOME/operon
 
-      - name: Configure CMake for Android ARM64 (Bionic)
+      - name: Pre-install Operon Dependencies via vcpkg
+        run: |
+          cd $HOME/operon
+          # Install dependencies for arm64-android using Operon's local ports
+          $HOME/vcpkg/vcpkg install \
+            --triplet=arm64-android \
+            --overlay-ports=./ports \
+            --x-install-root=$HOME/vcpkg_installed \
+            cpp-sort eve fast_float fluky pratt-parser taskflow ariacsvparser eigen3 fmt
+
+      - name: Configure CMake for Android ARM64
         run: |
           cd $HOME/operon
           cmake -B build -S . -GNinja \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DCMAKE_TOOLCHAIN_FILE=$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DVCPKG_TARGET_TRIPLET=arm64-android \
+            -DVCPKG_OVERLAY_PORTS=./ports \
+            -DCMAKE_PREFIX_PATH=$HOME/vcpkg_installed/arm64-android \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-28 \
             -DANDROID_STL=c++_static \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_CLI_PROGRAMS=ON \
-            -DENABLE_TESTING=OFF \
-            -DVCPKG_TARGET_TRIPLET=arm64-android \
-            -DVCPKG_OVERLAY_PORTS=./ports \
-            -DCMAKE_TOOLCHAIN_FILE_VCPKG=$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake
+            -DENABLE_TESTING=OFF
 
       - name: Compile Native Operon CLI
         run: |
