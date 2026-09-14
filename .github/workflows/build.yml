@@ -31,10 +31,39 @@ jobs:
         run: |
           git clone --recursive https://github.com/heal-research/operon.git $HOME/operon
 
-      - name: Pre-install Operon Dependencies via vcpkg
+      - name: Install Dependencies via vcpkg Manifest
         run: |
           cd $HOME/operon
-          # Install dependencies for arm64-android using Operon's local ports
+          # No package names needed! It automatically reads vcpkg.json!
+          $HOME/vcpkg/vcpkg install \
+            --triplet=arm64-android \
+            --overlay-ports=./ports
+
+      - name: Configure CMake for Android ARM64
+        run: |
+          cd $HOME/operon
+          cmake -B build -S . -GNinja \
+            -DCMAKE_TOOLCHAIN_FILE=$HOME/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DVCPKG_TARGET_TRIPLET=arm64-android \
+            -DVCPKG_OVERLAY_PORTS=./ports \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DANDROID_STL=c++_static \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_CLI_PROGRAMS=ON \
+            -DENABLE_TESTING=OFF
+
+      - name: Compile Native Operon CLI
+        run: |
+          cd $HOME/operon
+          ninja -C build operon_cli
+
+      - name: Upload Finished Android Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: operon_cli-termux-arm64
+          path: $HOME/operon/build/cli/operon_cli          # Install dependencies for arm64-android using Operon's local ports
           $HOME/vcpkg/vcpkg install \
             --triplet=arm64-android \
             --overlay-ports=./ports \
